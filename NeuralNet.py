@@ -4,26 +4,7 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
-
-class ZCATestTransform:
-    def __init__(self, mean, W_zca, epsilon=1e-8):
-        self.mean = mean
-        self.W_zca = W_zca
-        self.epsilon = epsilon
-
-    def __call__(self, img):
-        # Convert to numpy and normalize
-        x = np.array(img, dtype=np.float32).flatten() / 255.0
-        
-        # Apply ZCA whitening
-        x_centered = x - self.mean
-        x_zca = x_centered @ self.W_zca
-        
-        # Reshape and convert to tensor
-        x_zca = x_zca.reshape(3, 32, 32)
-        x_zca = (x_zca - x_zca.mean()) / (x_zca.std() + self.epsilon)
-        
-        return torch.tensor(x_zca, dtype=torch.float32)
+from scipy import linalg
 
 class ZCADataset(torch.utils.data.Dataset):
     def __init__(self, data, labels, add_noise_sigma=0.15, training=True):
@@ -45,16 +26,47 @@ class ZCADataset(torch.utils.data.Dataset):
             
         return x, y
     
-class GaussianNoise(nn.Module):
-    def __init__(self, sigma=0.15):
-        super().__init__()
-        self.sigma = sigma
+class ZCA(object):
+    def __init__(self, regularization=1e-5, x=None):
+        self.regularization = regularization
+        if x is not None:
+            self.fit(x)
 
-    def forward(self, x):
-        if self.training:
-            noise = torch.randn_like(x) * self.sigma
-            return x + noise
-        return x
+    def fit(self, x):
+        s = x.shape
+        x = x.copy().reshape((s[0],np.prod(s[1:])))
+        m = np.mean(x, axis=0)
+        x -= m
+        sigma = np.dot(x.T,x) / x.shape[0]
+        U, S, V = linalg.svd(sigma)
+        tmp = np.dot(U, np.diag(1./np.sqrt(S+self.regularization)))
+        tmp2 = np.dot(U, np.diag(np.sqrt(S+self.regularization)))
+        self.ZCA_mat = torch.tensor(np.dot(tmp, U.T), dtype=torch.float32)
+        self.inv_ZCA_mat = torch.tensor(np.dot(tmp2, U.T), dtype=torch.float32)
+        self.mean = torch.tensor(m, dtype=torch.float32)
+
+    def apply(self, x):
+        """
+        x: torch.Tensor of shape (batch_size, ...)
+        """
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
+        s = x.shape
+        x_flat = x.view(s[0], -1)  # flatten all dimensions except batch
+        x_whitened = torch.matmul(x_flat - self.mean, self.ZCA_mat)
+        return x_whitened.view(s)
+
+    def invert(self, x):
+        """
+        x: torch.Tensor of shape (batch_size, ...)
+        """
+        
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
+        s = x.shape
+        x_flat = x.view(s[0], -1)
+        x_original = torch.matmul(x_flat, self.inv_ZCA_mat) + self.mean
+        return x_original.view(s)
     
 # Learning rate scheduler: linear decay after 100 epochs
 def adjust_lr(optimizer, epoch, total_epochs=200):
@@ -129,69 +141,43 @@ class CIFAR10CNN(nn.Module):
         x = self.fc(x)
         return x
 
-def compute_zca_statistics(data_root='./data'):
-    """Compute ZCA statistics from CIFAR-10 training data"""
-    print("Computing ZCA statistics...")
-    
+def prepare_datasets(val_ratio=0.1, data_root='./data'):
+    """Prepare training, validation and test datasets"""
     # Load raw training data
-    train_dataset = datasets.CIFAR10(root=data_root, train=True, download=True, 
-                                   transform=transforms.ToTensor())
+    train_dataset_raw = datasets.CIFAR10(root=data_root, train=True, download=True, 
+                                         transform=transforms.ToTensor())
     
-    # Convert to numpy array
-    X_train = np.array([np.array(img) for img, _ in train_dataset], dtype=np.float32)
-    labels = np.array([label for _, label in train_dataset])
+    X_train = np.array([np.array(img) for img, _ in train_dataset_raw], dtype=np.float32)
+    labels = np.array([label for _, label in train_dataset_raw])
     
-    # Reshape and normalize
-    X_train = X_train.reshape(len(X_train), -1) / 255.0  # (50000, 3072)
+    # Fit ZCA
+    whitener = ZCA(x=X_train)
+    trainx_white = whitener.apply(X_train)
     
-    # Compute mean and ZCA matrix
-    X_mean = np.mean(X_train, axis=0)
-    X_centered = X_train - X_mean
-    
-    # Covariance and SVD
-    sigma = np.cov(X_centered, rowvar=False)  # (3072, 3072)
-    U, S, _ = np.linalg.svd(sigma)
-    epsilon = 1e-5
-    W_zca = U @ np.diag(1.0 / np.sqrt(S + epsilon)) @ U.T
-    
-    # Apply ZCA to training data
-    X_zca = X_centered @ W_zca
-    X_zca = X_zca.reshape(-1, 3, 32, 32)  # (50000, 3, 32, 32)
-    mean = X_zca_tensor.mean(dim=(0,2,3), keepdim=True)
-    std = X_zca_tensor.std(dim=(0,2,3), keepdim=True)
-
-    # Standardize
-    X_zca_tensor = (X_zca_tensor - mean) / (std + 1e-5)
-    X_zca_tensor = torch.tensor(X_zca, dtype=torch.float32)
+    X_zca_tensor = torch.tensor(trainx_white)
     labels_tensor = torch.tensor(labels, dtype=torch.long)
     
-    return X_mean, W_zca, X_zca_tensor, labels_tensor
-
-def prepare_datasets(X_mean, W_zca, X_zca_tensor, labels_tensor, val_ratio=0.1):
-    """Prepare training, validation and test datasets"""
-    
-    # Create base dataset with all ZCA-transformed training data
+    # Create full dataset
     full_train_dataset = ZCADataset(X_zca_tensor, labels_tensor, add_noise_sigma=0.15, training=True)
     
-    # Split into train/validation
+    # Split train/validation
     total_size = len(full_train_dataset)
     val_size = int(total_size * val_ratio)
     train_size = total_size - val_size
-    
     train_dataset, val_dataset = random_split(full_train_dataset, [train_size, val_size])
     
-    # For validation, we need to disable noise but keep ZCA transformation
-    # Extract the actual data from the subset
+    # Validation dataset without noise
     val_indices = val_dataset.indices
     X_val_data = X_zca_tensor[val_indices]
     val_labels = labels_tensor[val_indices]
-    
-    # Create validation dataset without noise
     val_dataset = ZCADataset(X_val_data, val_labels, add_noise_sigma=0.0, training=False)
     
-    # Test dataset with ZCA transform
-    transform_test = ZCATestTransform(X_mean, W_zca)
-    test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, 
-                                  transform=transform_test)
+    # Test dataset
+    test_dataset_raw = datasets.CIFAR10(root=data_root, train=False, download=True)
+    X_test = np.array([np.array(img) for img, _ in test_dataset_raw], dtype=np.float32)
+    labels_test = np.array([label for _, label in test_dataset_raw])
+    testx_white = whitener.apply(X_test)
+    test_dataset = ZCADataset(torch.tensor(testx_white), torch.tensor(labels_test, dtype=torch.long),
+                              add_noise_sigma=0.0, training=False)
     
     return train_dataset, val_dataset, test_dataset

@@ -3,7 +3,7 @@ import torch.nn as nn
 from file_operations import create_directory
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from NeuralNet import CIFAR10CNN, adjust_lr, prepare_datasets, compute_zca_statistics
+from NeuralNet import CIFAR10CNN, adjust_lr, prepare_datasets
 from csv_operations import csv_write2
 
 def save(model, optimizer, epoch_loss, activation_type, epoch, dir):
@@ -21,12 +21,10 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
     dir = 'RESULTS/CIFAR10/' + activation_type + '/'
     create_directory('RESULTS/CIFAR10/' + activation_type + '/')
     create_directory('PICS/CIFAR10/' + activation_type + '/')
-
-    X_mean, W_zca, X_zca_tensor, labels_tensor = compute_zca_statistics()
     
     # Step 2: Prepare datasets
     train_dataset, val_dataset, test_dataset = prepare_datasets(
-        X_mean, W_zca, X_zca_tensor, labels_tensor, val_ratio=0.1
+        val_ratio=0.1
     )
     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
