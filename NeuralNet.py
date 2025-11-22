@@ -153,12 +153,12 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     # Fit ZCA
     whitener = ZCA(x=X_train)
     trainx_white = whitener.apply(X_train)
+    print(trainx_white.shape)
     
-    X_zca_tensor = torch.tensor(trainx_white)
     labels_tensor = torch.tensor(labels, dtype=torch.long)
     
     # Create full dataset
-    full_train_dataset = ZCADataset(X_zca_tensor, labels_tensor, add_noise_sigma=0.15, training=True)
+    full_train_dataset = ZCADataset(trainx_white, labels_tensor, add_noise_sigma=0.15, training=True)
     
     # Split train/validation
     total_size = len(full_train_dataset)
@@ -168,7 +168,7 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     
     # Validation dataset without noise
     val_indices = val_dataset.indices
-    X_val_data = X_zca_tensor[val_indices]
+    X_val_data = trainx_white[val_indices]
     val_labels = labels_tensor[val_indices]
     val_dataset = ZCADataset(X_val_data, val_labels, add_noise_sigma=0.0, training=False)
     
@@ -177,7 +177,7 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     X_test = np.array([np.array(img) for img, _ in test_dataset_raw], dtype=np.float32)
     labels_test = np.array([label for _, label in test_dataset_raw])
     testx_white = whitener.apply(X_test)
-    test_dataset = ZCADataset(torch.tensor(testx_white), torch.tensor(labels_test, dtype=torch.long),
+    test_dataset = ZCADataset(testx_white, torch.tensor(labels_test, dtype=torch.long),
                               add_noise_sigma=0.0, training=False)
     
     return train_dataset, val_dataset, test_dataset
