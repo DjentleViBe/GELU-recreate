@@ -21,13 +21,7 @@ class ZCATestTransform:
         
         # Reshape and convert to tensor
         x_zca = x_zca.reshape(3, 32, 32)
-        
-        # Normalize to reasonable range (ZCA can produce outliers)
-        # Use robust normalization to handle extreme values
-        x_min = np.percentile(x_zca, 1)
-        x_max = np.percentile(x_zca, 99)
-        x_zca = (x_zca - x_min) / (x_max - x_min + self.epsilon)
-        x_zca = np.clip(x_zca, 0, 1)
+        x_zca = (x_zca - x_zca.mean()) / (x_zca.std() + self.epsilon)
         
         return torch.tensor(x_zca, dtype=torch.float32)
 
@@ -163,18 +157,11 @@ def compute_zca_statistics(data_root='./data'):
     # Apply ZCA to training data
     X_zca = X_centered @ W_zca
     X_zca = X_zca.reshape(-1, 3, 32, 32)  # (50000, 3, 32, 32)
-    
-    # Normalize to reasonable range
-    for i in range(len(X_zca)):
-        img = X_zca[i]
-        for channel in range(3):
-            channel_data = img[channel]
-            p1, p99 = np.percentile(channel_data, [1, 99])
-            if p99 - p1 > 1e-8:
-                channel_data = (channel_data - p1) / (p99 - p1)
-                channel_data = np.clip(channel_data, 0, 1)
-            img[channel] = channel_data
-    
+    mean = X_zca_tensor.mean(dim=(0,2,3), keepdim=True)
+    std = X_zca_tensor.std(dim=(0,2,3), keepdim=True)
+
+    # Standardize
+    X_zca_tensor = (X_zca_tensor - mean) / (std + 1e-5)
     X_zca_tensor = torch.tensor(X_zca, dtype=torch.float32)
     labels_tensor = torch.tensor(labels, dtype=torch.long)
     

@@ -1,11 +1,9 @@
 import torch
-import numpy as np
 import torch.nn as nn
 from file_operations import create_directory
 from torch.optim import Adam
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader, random_split
-from NeuralNet import CIFAR10CNN, adjust_lr, GaussianNoise, ZCADataset, ZCATestTransform, prepare_datasets, compute_zca_statistics
+from torch.utils.data import DataLoader
+from NeuralNet import CIFAR10CNN, adjust_lr, prepare_datasets, compute_zca_statistics
 from csv_operations import csv_write2
 
 def save(model, optimizer, epoch_loss, activation_type, epoch, dir):
