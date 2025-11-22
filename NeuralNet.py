@@ -149,12 +149,10 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     
     X_train = np.array([np.array(img) for img, _ in train_dataset_raw], dtype=np.float32)
     labels = np.array([label for _, label in train_dataset_raw])
-    
     # Fit ZCA
     whitener = ZCA(x=X_train)
     trainx_white = whitener.apply(X_train)
-    print(trainx_white.shape)
-    
+    #print(trainx_white.shape)
     labels_tensor = torch.tensor(labels, dtype=torch.long)
     
     # Create full dataset
@@ -177,7 +175,8 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     X_test = np.array([np.array(img) for img, _ in test_dataset_raw], dtype=np.float32)
     labels_test = np.array([label for _, label in test_dataset_raw])
     testx_white = whitener.apply(X_test)
+    testx_white = testx_white.permute(0,3,1,2)
     test_dataset = ZCADataset(testx_white, torch.tensor(labels_test, dtype=torch.long),
                               add_noise_sigma=0.0, training=False)
-    
+    #print(train_dataset.shape)
     return train_dataset, val_dataset, test_dataset

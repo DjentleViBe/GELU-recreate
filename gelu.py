@@ -47,6 +47,7 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
         for param_group in optimizer.param_groups:
             lr = param_group['lr']
         for x, y in train_loader:
+            #print(x.shape)
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
             loss = criterion(model(x), y)
@@ -83,6 +84,7 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
         test_collect.append(100 * correct_test / total_test)
         if (epoch + 1) % 20  == 0:
             save(model, optimizer, epoch_loss, activation_type, epoch, dir)    
+        
         print(f"Epoch {epoch+1}, loss: {epoch_loss:.4f}, Val Acc: {val_acc:.4f}, Test Acc: {100 * correct_test / total_test:.4f}, lr : {lr:.5f}")
 
     loss_collect = torch.tensor(loss_collect)
