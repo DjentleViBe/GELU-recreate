@@ -171,11 +171,11 @@ def prepare_datasets(val_ratio=0.1, data_root='./data'):
     val_dataset = ZCADataset(X_val_data, val_labels, add_noise_sigma=0.0, training=False)
     
     # Test dataset
-    test_dataset_raw = datasets.CIFAR10(root=data_root, train=False, download=True)
+    test_dataset_raw = datasets.CIFAR10(root=data_root, train=False, download=True,
+                                        transform=transforms.ToTensor())
     X_test = np.array([np.array(img) for img, _ in test_dataset_raw], dtype=np.float32)
     labels_test = np.array([label for _, label in test_dataset_raw])
     testx_white = whitener.apply(X_test)
-    testx_white = testx_white.permute(0,3,1,2)
     test_dataset = ZCADataset(testx_white, torch.tensor(labels_test, dtype=torch.long),
                               add_noise_sigma=0.0, training=False)
     #print(train_dataset.shape)
