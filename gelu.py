@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import torch.nn as nn
 from file_operations import create_directory
 from torch.optim import Adam
