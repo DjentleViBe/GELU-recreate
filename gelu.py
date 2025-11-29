@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 from file_operations import create_directory
 from torch.optim import Adam
-from torch.utils.data import DataLoader
-from NeuralNet import CIFAR10CNN, adjust_lr, prepare_datasets, compute_zca_statistics
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, random_split
+from NeuralNet import CIFAR10CNN, adjust_lr, prepare_datasets
 from csv_operations import csv_write2
 
 def save(model, optimizer, epoch_loss, activation_type, epoch, dir):
@@ -22,12 +23,11 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
     create_directory('RESULTS/CIFAR10/' + activation_type + '/')
     create_directory('PICS/CIFAR10/' + activation_type + '/')
 
-    X_mean, W_zca, X_zca_tensor, labels_tensor = compute_zca_statistics()
-    
+    train_dataset, val_dataset, test_dataset, train_indices, val_indices = prepare_datasets(
+            val_ratio=0.0,
+            mode = 0
+        )
     # Step 2: Prepare datasets
-    train_dataset, val_dataset, test_dataset = prepare_datasets(
-        X_mean, W_zca, X_zca_tensor, labels_tensor, val_ratio=0.1
-    )
     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
@@ -69,7 +69,7 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
                 _, predicted = outputs.max(1)
                 total_val += y.size(0)
                 correct_val += (predicted == y).sum().item()
-        val_acc = correct_val / total_val
+        val_acc = correct_val / max(total_val, 1.0)
         val_collect.append(val_acc)
         if epoch % 5 == 0:
             model.eval()
