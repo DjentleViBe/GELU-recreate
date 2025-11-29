@@ -70,7 +70,7 @@ def cifar10_data(epochs, learn_rate, device, activation_type='default'):
                 _, predicted = outputs.max(1)
                 total_val += y.size(0)
                 correct_val += (predicted == y).sum().item()
-        val_acc = correct_val / total_val
+        val_acc = correct_val / max(total_val, 1.0)
         val_collect.append(val_acc)
         if epoch % 5 == 0:
             model.eval()
